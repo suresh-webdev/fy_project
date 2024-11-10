@@ -1,0 +1,307 @@
+import cv2
+import mediapipe as mp
+import time
+import pymongo
+import threading
+from datetime import datetime
+from flask import Flask, Response, jsonify
+from flask_socketio import SocketIO, emit
+
+
+# Initialize Flask and SocketIO
+app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+
+# Initialize MediaPipe Hand model
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(static_image_mode=False, max_num_hands=2, min_detection_confidence=0.7)
+mp_drawing = mp.solutions.drawing_utils
+
+# MongoDB connection setup
+client = pymongo.MongoClient("mongodb+srv://new:new@client.d8j8m.mongodb.net/?retryWrites=true&w=majority&appName=Client")
+db = client["oee_db"]
+collection = db["oee_data"]
+
+# Prompt user for user_id, target count, and number of working areas
+user_id = input("Enter your user_id: ")
+target_count = int(input("Enter your target count: "))
+num_working_areas = int(input("Enter the number of working areas: "))
+
+# Initialize area coordinates
+working_areas = [None] * num_working_areas
+main_area = None
+
+# SocketIO event handlers
+# @socketio.on('connect')
+# def handle_connect():
+#     print("Client connected to WebSocket")
+#     emit('server_response', {'data': 'Connected to WebSocket!'})
+    
+#     # Start a separate thread for emitting video data
+#     thread = threading.Thread(target=process)
+#     thread.daemon = True
+#     thread.start()
+    # socketio.start_background_task(emit_performance_data)
+
+    #  # Start a separate thread for emitting performance data
+    # performance_data_thread = threading.Thread(target=emit_performance_data)
+    # performance_data_thread.daemon = True
+    # performance_data_thread.start()
+
+# @socketio.on('disconnect')
+# def handle_disconnect():
+#     print("Client disconnected from WebSocket")
+
+# Global variables
+total_count = 0
+completed_count = 0
+violated_count = 0
+yet_to_complete_count = target_count
+frame = None  # Initialize frame as a global variable
+
+# # Emit performance data every 5 seconds
+# def emit_performance_data():
+#     global total_count, completed_count, violated_count, target_count
+#     while True:
+#         socketio.emit('performance_data', {
+#             'totalCount': total_count,
+#             'sopViolation': violated_count,
+#             'target': target_count
+#         })
+#         socketio.sleep(5)
+
+# Create the video stream generator
+def generate_video_stream():
+    global frame
+    while True:
+        if frame is not None:  # Ensure frame is not None
+            ret, jpeg = cv2.imencode('.jpg', frame)  # Encode frame as JPEG
+            if ret:
+                # Convert the frame to bytes and yield it as part of multipart response
+                frame_bytes = jpeg.tobytes()
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+# Function to check if a point is within a specific area
+def is_in_area(point, area):
+    if area is None:
+        return False
+    (x, y) = point
+    (x1, y1), (x2, y2) = area
+    return x1 <= x <= x2 and y1 <= y <= y2
+
+# Function to get the area name based on coordinates
+def get_area_name(x, y):
+    for i, area in enumerate(working_areas):
+        if is_in_area((x, y), area):
+            return f"Working Area {i + 1}"
+    if is_in_area((x, y), main_area):
+        return "Main Area"
+    return None
+
+# Function to check if the sequence is correct
+def check_sequence(current_sequence, expected_sequence):
+    return current_sequence == expected_sequence
+
+# Define function to calculate metrics and update MongoDB
+def update_mongodb(sop_violation):
+    global completed_count, violated_count, yet_to_complete_count, total_count, availability, performance, maintenance, timestamp, target_count
+    total_count = completed_count + violated_count + yet_to_complete_count
+    availability = (completed_count / total_count) * 100 if total_count > 0 else 0
+    performance = (completed_count / (completed_count + violated_count)) * 100 if (completed_count + violated_count) > 0 else 0
+    maintenance = (completed_count / total_count) * 100 if total_count > 0 else 0
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print("The steps are",num_working_areas)
+    data = {
+        "user_id": user_id,
+        "availability": availability,
+        "performance": performance,
+        "maintenance": maintenance,
+        "completed_count": completed_count,
+        "violated_count": violated_count,
+        "yet_to_complete_count": yet_to_complete_count,
+        "total_count": total_count,
+        "sop_violation": sop_violation,
+        "target": target_count,
+        "timestamp": timestamp,
+        "steps":num_working_areas,
+        "current_sequence":current_sequence
+    }
+
+    collection.update_one({"user_id": user_id}, {"$set": data}, upsert=True)
+    print(f"Data for user {user_id} updated in MongoDB: {data}")
+    
+    # socketio.emit('performance_data', {
+    #     'totalCount': total_count,
+    #     'sopViolation': violated_count,
+    #     'target': target_count
+    # })
+
+# Mouse callback function for selecting areas
+def mouse_callback(event, x, y, flags, param):
+    global start_point, end_point, selecting, selected_area
+    selecting = False
+
+    if event == cv2.EVENT_LBUTTONDOWN:
+        start_point = (x, y)
+        selecting = True
+
+    elif event == cv2.EVENT_MOUSEMOVE:
+        if selecting:
+            end_point = (x, y)
+
+    elif event == cv2.EVENT_LBUTTONUP:
+        end_point = (x, y)
+        selecting = False
+        if start_point and end_point:
+            if selected_area.startswith("Working Area"):
+                index = int(selected_area.split()[-1]) - 1
+                working_areas[index] = (start_point, end_point)
+                print(f"{selected_area} set to: {start_point} to {end_point}")
+            elif selected_area == "Main Area":
+                global main_area
+                main_area = (start_point, end_point)
+                print(f"Main Area set to: {start_point} to {end_point}")
+
+# Function to process frames and track hand movements
+def process():
+    global frame, completed_count, violated_count, yet_to_complete_count
+    global violation_detected,start_time,last_cycle_time,cycle_completed,current_sequence,expected_sequence
+    completed_count = 0
+    violated_count = 0
+    yet_to_complete_count = target_count
+    violation_detected = False
+    start_time = None
+    cycle_completed = False
+    last_cycle_time = time.time()
+    expected_sequence = []
+    for i in range(num_working_areas):
+        expected_sequence.append(f"Working Area {i + 1}")
+        expected_sequence.append("Main Area")
+    current_sequence = []
+
+    cap = cv2.VideoCapture(0)
+    cv2.namedWindow("Hand Tracking")
+    cv2.setMouseCallback("Hand Tracking", mouse_callback)
+    
+    # flipped = False
+    while cap.isOpened():
+        success, frame = cap.read()
+        if not success:
+            print("Ignoring empty camera frame.")
+            continue
+
+        # frame_queue.put(frame) 
+        # if not flipped:
+        frame = cv2.flip(frame, 1)
+        # flipped = True
+        h, w, _ = frame.shape
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = hands.process(frame_rgb)
+
+        # Draw selected regions on the frame
+        for i, area in enumerate(working_areas):
+            if area:
+                cv2.rectangle(frame, area[0], area[1], (0, 255, 0), 2)
+                cv2.putText(frame, f"Working Area {i + 1}", (area[0][0], area[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        if main_area:
+            cv2.rectangle(frame, main_area[0], main_area[1], (255, 0, 0), 2)
+            cv2.putText(frame, "Main Area", (main_area[0][0], main_area[0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+
+        # Process hand landmarks if detected and no violation
+        
+
+        if results.multi_hand_landmarks and not violation_detected:
+            for hand_landmarks in results.multi_hand_landmarks:
+                x = int(hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP].x * w)
+                y = int(hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP].y * h)
+
+                # Get current area
+                area_name = get_area_name(x, y)
+                if area_name and (not current_sequence or current_sequence[-1] != area_name):
+                    current_sequence.append(area_name)
+                    print(f"Moved to: {area_name}")
+                    cv2.putText(frame, f"Moved to: {area_name}", (50, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+                
+                # Start timing when the first valid move is detected
+                if not start_time:
+                    start_time = time.time()
+
+                # Check for violations if the sequence is incorrect
+                if len(current_sequence) > len(expected_sequence) or current_sequence != expected_sequence[:len(current_sequence)]:
+                    violation_detected = True
+                    current_sequence = []
+                    violated_count += 1
+                    print("Error: Violation detected! Press 'r' to reset.")
+                    cv2.putText(frame, "Violation detected! Press 'r' to reset.", (50, 300), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    
+                    sop_violation = True
+                    update_mongodb(sop_violation)
+                    break
+
+                # Check if sequence completed correctly
+                if check_sequence(current_sequence, expected_sequence):
+                    cycle_completed = True
+                    completed_count += 1
+                    print("Sequence completed successfully! Waiting 3 seconds...")
+                    cv2.putText(frame, "Cycle completed!", (50, 300), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                
+                    sop_violation = False
+                    update_mongodb(sop_violation)
+                    current_sequence = []
+                    last_cycle_time = time.time()
+                    yet_to_complete_count = max(target_count - completed_count - violated_count, 0)
+                    start_time = None
+                    time.sleep(3) 
+
+                     # Check if target count is reached
+                    if completed_count >= target_count:
+                        print("Target count reached. Process complete.")
+                        cap.release()
+                        cv2.destroyAllWindows()
+                        break
+
+        # Display the frame with updates
+        cv2.imshow("Hand Tracking", frame)
+
+     # Key events
+        key = cv2.waitKey(1)
+        if key == ord("q"):  # Quit
+            break
+        elif key in range(ord("1"), ord("1") + num_working_areas):  # Set Working Areas
+            area_index = key - ord("1")
+            global selected_area
+            selected_area = f"Working Area {area_index + 1}"
+            print(f"Selected {selected_area} for area selection.")
+        elif key == ord("m"):  # Set Main Area
+            selected_area = "Main Area"
+            print("Selected Main Area for area selection.")
+        elif key == ord("r"):  # Reset violation state
+            violation_detected = False
+            current_sequence = []
+            start_time = None
+            print("Sequence reset.")
+        
+    cap.release()
+    cv2.destroyAllWindows()
+    hands.close()
+
+@app.after_request
+def apply_csp(response):
+    csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
+    response.headers['Content-Security-Policy'] = csp
+    return response
+
+# Define route for streaming video
+@app.route('/video_feed')
+def video_feed():
+    return Response(generate_video_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+thread = threading.Thread(target=process)
+thread.daemon = True
+thread.start()
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=5000)
+

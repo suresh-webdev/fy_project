@@ -1,0 +1,200 @@
+/* Navbar */
+.nav-container{
+    background-color: black;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding:.5rem 1rem;
+}
+
+.nav-logo{
+ 
+    height: 30px;
+}
+
+.profile{
+    color: white;
+    font-size: 2rem;
+}
+.logout{
+    color:red;
+}
+
+.profile-container{
+    display: flex;
+    color: white;
+}
+.profile-container > h2{
+    font-size: 1rem;
+    margin:0 1rem 0 .5rem;
+}
+
+/* OEE METER */
+.oee-container{
+    margin: .5rem;
+    display: flex;
+    flex-direction: column;
+    border:2px solid grey;
+    padding: 1rem;
+    width: 44%;
+    border-radius: .5rem;
+}
+.oee-container > h2{
+    font-weight: 600;
+}
+
+.oee-wrapper{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.speedometer{
+    width:max-content;
+    margin-right: 1rem;
+}
+
+.bar-container{
+    width: 100%;
+}
+.progress-bar{
+    width: 100%;
+    margin-top: 1rem;
+}
+.progress-bar:last-child{
+    margin-bottom: 1rem;
+}
+
+/* Pie Chart */
+
+.chart-container{
+    border: 2px solid grey;
+    border-radius: .8rem;
+    width: 32%;
+    margin: .5rem;
+}
+
+.chart-container > h2{
+    margin: 1rem 0 1rem 1rem;
+    font-weight: 600;
+}
+
+/* Notification */
+.notification-container{
+    border: 2px solid grey;
+    border-radius: .8rem;
+    margin: .5rem;
+    padding: 1rem;
+}
+
+.notification-container > h2{
+    font-weight: 600;
+}
+
+.notification-cnt{
+    color: red;
+    font-size: 3rem;
+}
+
+
+/* Timer */
+.timer-container{
+    display: flex;
+    justify-content: center;
+    border: 2px solid grey;
+    padding: .1rem;
+    border-radius: .8rem;
+    margin: 0 .5rem;
+}
+
+.timer-container > h1{
+    font-size: 2rem;
+    color: red;
+}
+
+/* SOPC */
+
+.sopc-container{
+    border:2px solid grey;
+    margin: .5rem .5rem;
+    padding: 1rem;
+    width: 30%;
+    height: 100%;
+    border-radius: 1.25rem;
+}
+
+.sopc-container > h2{
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.steps-wrapper{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.step{
+    padding: .5rem 4rem;
+    background-color: grey;
+    border-radius: .5rem;
+    margin-bottom: .5rem;
+}
+
+.active{
+    background-color: green;
+}
+
+/* Video Streamer */
+.video-container{
+    border:2px solid grey;
+    margin:.5rem;
+    border-radius: 1.25rem;
+    padding: 1rem;
+
+}
+
+/* Performance Tracker */
+.performance-container{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border:2px solid grey;
+    margin:.5rem;
+    border-radius: 1.25rem;
+    width: 26%;
+    
+}
+
+.total-count,.sop-violation,.target{
+    width: 98%;
+    padding: .5rem;
+    border:2px solid grey;
+    margin:.2rem;
+    border-radius: 1.25rem;
+    margin-bottom: .5rem;
+}
+
+.target{
+    margin-bottom: none;
+}
+
+.pc-heading{
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+.pc-values{
+    font-size: 2rem;
+    text-align: center;
+}
+
+/* Main Dashboard */
+.dashboard-top{
+    display: flex;
+}
+
+.dashboard-btm{
+    display: flex;
+}
+
