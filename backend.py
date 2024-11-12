@@ -1,16 +1,19 @@
 import cv2
 import mediapipe as mp
+import json
 import time
 import pymongo
 import threading
 from datetime import datetime
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify,stream_with_context
 from flask_socketio import SocketIO, emit
+from flask_cors import CORS
 
 
 # Initialize Flask and SocketIO
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+CORS(app)
+# socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 # Initialize MediaPipe Hand model
 mp_hands = mp.solutions.hands
@@ -31,26 +34,6 @@ num_working_areas = int(input("Enter the number of working areas: "))
 working_areas = [None] * num_working_areas
 main_area = None
 
-# SocketIO event handlers
-# @socketio.on('connect')
-# def handle_connect():
-#     print("Client connected to WebSocket")
-#     emit('server_response', {'data': 'Connected to WebSocket!'})
-    
-#     # Start a separate thread for emitting video data
-#     thread = threading.Thread(target=process)
-#     thread.daemon = True
-#     thread.start()
-    # socketio.start_background_task(emit_performance_data)
-
-    #  # Start a separate thread for emitting performance data
-    # performance_data_thread = threading.Thread(target=emit_performance_data)
-    # performance_data_thread.daemon = True
-    # performance_data_thread.start()
-
-# @socketio.on('disconnect')
-# def handle_disconnect():
-#     print("Client disconnected from WebSocket")
 
 # Global variables
 total_count = 0
@@ -59,16 +42,6 @@ violated_count = 0
 yet_to_complete_count = target_count
 frame = None  # Initialize frame as a global variable
 
-# # Emit performance data every 5 seconds
-# def emit_performance_data():
-#     global total_count, completed_count, violated_count, target_count
-#     while True:
-#         socketio.emit('performance_data', {
-#             'totalCount': total_count,
-#             'sopViolation': violated_count,
-#             'target': target_count
-#         })
-#         socketio.sleep(5)
 
 # Create the video stream generator
 def generate_video_stream():
@@ -298,6 +271,19 @@ def apply_csp(response):
 def video_feed():
     return Response(generate_video_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@app.route('/stream')
+def stream():
+    def event_stream():
+        while True:
+            num_items_to_send = len(current_sequence) // 2 
+            yield f"data: {json.dumps(num_items_to_send)}\n\n"
+            time.sleep(1)  # Adjust as needed for your update frequency
+
+    return Response(stream_with_context(event_stream()), content_type='text/event-stream')
+
+threads = threading.Thread(target=stream)
+threads.daemon=True
+threads.start()
 
 thread = threading.Thread(target=process)
 thread.daemon = True

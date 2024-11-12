@@ -1,10 +1,21 @@
-import React from "react";
+import React,{useState,useEffect} from "react";
 import "../styles/dashboard.css"
 import { FaUserCircle } from "react-icons/fa";
 import { LuLogOut } from "react-icons/lu";
 import logo from "../logo.png";
+import { Link } from 'react-router-dom';
 
 function Navbar({ startTimer, pauseTimer, stopTimer }){
+
+  const [username, setUsername] = useState("");
+
+  useEffect(() => {
+      // Retrieve the username from localStorage
+      const storedUsername = localStorage.getItem("loginId");
+      if (storedUsername) {
+          setUsername(storedUsername);
+      }
+  }, []);
     return (
         <div className="nav-container">
            <div className="timer controllers">
@@ -35,8 +46,10 @@ function Navbar({ startTimer, pauseTimer, stopTimer }){
             </div>
             <div className="profile-container">
                 <FaUserCircle className="profile"/>
-                <h2>User</h2>
-                <LuLogOut className="profile logout"/>
+                <h2>{username}</h2>
+                <Link to="/login"> 
+                  <LuLogOut className="profile logout" />
+                </Link>
             </div>
         </div>
     );
