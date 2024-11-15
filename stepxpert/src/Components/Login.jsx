@@ -10,13 +10,14 @@ function Login() {
     const [loginId, setLoginId] = useState("");
     const [targetCount, setTargetCount] = useState("");
     const [workingArea, setWorkingArea] = useState("");
+    const[productID,setProductID]=useState("");
 
     const handleSubmit = () => {
         // Store details in localStorage
         localStorage.setItem("loginId", loginId);
         localStorage.setItem("targetCount", targetCount);
         localStorage.setItem("workingArea", workingArea);
-        
+        localStorage.setItem("productID", productID);
         // Redirect to /dashboard
         navigate("/dashboard");
     };
@@ -68,6 +69,16 @@ function Login() {
                                 <option key={i + 1} value={i + 1}>{i + 1}</option>
                             ))}
                         </select>
+                    </div>
+                    <div className="login input">
+                        <input
+                            className="target-count"
+                            id="target_count"
+                            type="text"
+                            placeholder='Enter Product ID'
+                            value={targetCount}
+                            onChange={(e) => setProductID(e.target.value)}
+                        />
                     </div>
 
                     <div className="login-btn-container">
