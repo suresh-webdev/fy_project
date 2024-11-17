@@ -3,6 +3,7 @@ import mediapipe as mp
 import json
 import time
 import pymongo
+from flask import request
 import threading
 from datetime import datetime
 from flask import Flask, Response, jsonify,stream_with_context
@@ -270,6 +271,35 @@ def apply_csp(response):
 @app.route('/video_feed')
 def video_feed():
     return Response(generate_video_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/api/update-areas', methods=['POST'])
+def update_areas():
+    global working_areas, main_area
+
+    # Parse JSON payload
+    data = request.get_json()
+    if not data or 'areas' not in data:
+        return jsonify({"error": "Invalid payload"}), 400
+
+    # Extract areas and update global variables
+    areas = data['areas']
+    working_areas = [
+        (
+            (area['x1'], area['y1']),
+            (area['x2'], area['y2'])
+        ) for area in areas if area['type'].startswith('working')
+    ]
+    main_area = next(
+        (
+            (area['x1'], area['y1']),
+            (area['x2'], area['y2'])
+        ) for area in areas if area['type'] == 'main'
+    ), None
+
+    print(f"Working areas updated: {working_areas}")
+    print(f"Main area updated: {main_area}")
+
+    return jsonify({"message": "Areas updated successfully!"})
 
 @app.route('/stream')
 def stream():

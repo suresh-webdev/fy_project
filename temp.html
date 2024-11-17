@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canvas Drawing</title>
+  <style>
+    canvas {
+      border: 1px solid black;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="drawingCanvas" width="800" height="600"></canvas>
+  <script>
+    const canvas = document.getElementById('drawingCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let isDrawing = false;
+
+    // Start drawing
+    canvas.addEventListener('mousedown', (e) => {
+      isDrawing = true;
+      ctx.beginPath(); // Start a new path
+      ctx.moveTo(e.offsetX, e.offsetY); // Move to the mouse's starting position
+    });
+
+    // Continue drawing
+    canvas.addEventListener('mousemove', (e) => {
+      if (!isDrawing) return;
+      ctx.lineTo(e.offsetX, e.offsetY); // Draw a line to the new mouse position
+      ctx.stroke(); // Render the line
+    });
+
+    // Stop drawing
+    canvas.addEventListener('mouseup', () => {
+      isDrawing = false;
+      ctx.closePath(); // Finish the current path
+    });
+
+    // Stop drawing if the mouse leaves the canvas
+    canvas.addEventListener('mouseleave', () => {
+      isDrawing = false;
+    });
+  </script>
+</body>
+</html>
