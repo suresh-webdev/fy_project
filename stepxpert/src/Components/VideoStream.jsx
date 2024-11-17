@@ -1,15 +1,3 @@
-// import React from 'react';
-// import "../styles/dashboard.css";
-
-// function VideoStream() {
-//   return (
-//     <div className='video-container'  style={{ display: 'flex', justifyContent: 'center',width: '50%'}}>
-//       <img src="http://localhost:5000/video_feed" alt="Loading..." width="450"  />
-//     </div>
-//   );
-// }
-
-// export default VideoStream;
 import React, { useEffect, useRef, useState } from "react";
 
 const VideoStream = () => {
@@ -19,6 +7,7 @@ const VideoStream = () => {
   const [areas, setAreas] = useState([]); // Stores all drawn areas
   const [currentArea, setCurrentArea] = useState(null); // Temporarily stores the area being drawn
   const [selectedAreaType, setSelectedAreaType] = useState("working1"); // Tracks the current area type (working1, working2, or main)
+  const [bordersVisible, setBordersVisible] = useState(true); // Tracks visibility of the borders
 
   // Load areas from localStorage when the component mounts
   useEffect(() => {
@@ -53,7 +42,7 @@ const VideoStream = () => {
     }
   }, [areas]); // Depend on `areas` to redraw after loading
 
-  // Handle keyboard input for selecting area types
+  // Handle keyboard input for selecting area types and making requests
   useEffect(() => {
     const handleKeyPress = (e) => {
       if (e.key === "1") {
@@ -62,6 +51,12 @@ const VideoStream = () => {
         setSelectedAreaType("working2");
       } else if (e.key.toLowerCase() === "m") {
         setSelectedAreaType("main");
+      } else if (e.key.toLowerCase() === "r") {
+        // Send POST request on 'r' key press
+        sendPostRequest("r");
+      } else if (e.key.toLowerCase() === "q") {
+        // Send POST request on 'q' key press
+        sendPostRequest("q");
       }
     };
 
@@ -69,19 +64,20 @@ const VideoStream = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyPress);
     };
-  }, []);
+  }, [areas]);
 
   const handleMouseDown = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const startX = e.clientX - rect.left;
     const startY = e.clientY - rect.top;
+
     setCurrentArea({
-      x1: startX,
-      y1: startY,
-      x2: startX,
-      y2: startY,
-      type: selectedAreaType, // Add area type to the current area
+      area: selectedAreaType,
+      coordinates: {
+        start: { x: startX, y: startY },
+        end: { x: startX, y: startY },
+      },
     });
     setDrawing(true);
   };
@@ -95,8 +91,10 @@ const VideoStream = () => {
 
     setCurrentArea((prev) => ({
       ...prev,
-      x2: endX,
-      y2: endY,
+      coordinates: {
+        ...prev.coordinates,
+        end: { x: endX, y: endY },
+      },
     }));
   };
 
@@ -105,7 +103,7 @@ const VideoStream = () => {
       setAreas((prev) => {
         // Remove any existing area of the same type before adding a new one
         return [
-          ...prev.filter((area) => area.type !== currentArea.type),
+          ...prev.filter((area) => area.area !== currentArea.area),
           currentArea,
         ];
       });
@@ -123,52 +121,65 @@ const VideoStream = () => {
     // Clear the canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw all saved areas
-    areas.forEach((area) => {
-      ctx.strokeStyle =
-        area.type === "main"
-          ? "blue"
-          : area.type === "working1"
-          ? "green"
-          : "red"; // Different colors for different areas
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        area.x1,
-        area.y1,
-        area.x2 - area.x1,
-        area.y2 - area.y1
-      );
-    });
+    // Draw all saved areas if borders are visible
+    if (bordersVisible) {
+      areas.forEach((area) => {
+        const { start, end } = area.coordinates;
+        ctx.strokeStyle =
+          area.area === "main"
+            ? "blue"
+            : area.area === "working1"
+            ? "green"
+            : "red"; // Different colors for different areas
+        ctx.lineWidth = 2;
+        ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
+      });
+    }
 
-    // Draw the area currently being drawn
-    if (currentArea) {
+    // Draw the area currently being drawn if borders are visible
+    if (bordersVisible && currentArea) {
+      const { start, end } = currentArea.coordinates;
       ctx.strokeStyle =
-        currentArea.type === "main"
+        currentArea.area === "main"
           ? "blue"
-          : currentArea.type === "working1"
+          : currentArea.area === "working1"
           ? "green"
           : "red";
       ctx.lineWidth = 2;
-      ctx.strokeRect(
-        currentArea.x1,
-        currentArea.y1,
-        currentArea.x2 - currentArea.x1,
-        currentArea.y2 - currentArea.y1
-      );
+      ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
     }
+  };
+
+  const sendPostRequest = (key) => {
+    // Send a POST request to the backend with area information when 'r' or 'q' is pressed
+    fetch("http://localhost:5000/api/keypress", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ key:key }), // Add action (r/q) for differentiation
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        console.log(`Areas updated with action ${key}:`, data);
+      })
+      .catch((error) => {
+        console.error(`Error updating areas with action ${key}:`, error);
+      });
   };
 
   return (
     <div
       className="video-container"
-      style={{ position: "relative", width: "50%" }}
+      style={{ position: "relative",justifyContent: "center",display:"flex",width:"490px" }}
+     
     >
       <img
         ref={imgRef}
         src="http://localhost:5000/video_feed"
         alt="Video Stream"
         style={{
-          width: "100%",
+          width: "30% !important",
           display: "block",
         }}
         draggable="false" // Prevent dragging
@@ -183,6 +194,7 @@ const VideoStream = () => {
           pointerEvents: "auto", // Enable interaction
           cursor: "crosshair",
           height: "100%",
+          width:"100%"
         }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -200,37 +212,40 @@ const VideoStream = () => {
           borderRadius: "5px",
         }}
       >
-        <p>Press 1: Select Working Area 1 (Green)</p>
-        <p>Press 2: Select Working Area 2 (Red)</p>
-        <p>Press M: Select Main Area (Blue)</p>
-        <p>Current Selection: {selectedAreaType.toUpperCase()}</p>
+        {/* <p>Press 1: Select Working Area 1 (Green)</p> */}
+        {/* <p>Press 2: Select Working Area 2 (Red)</p> */}
+        {/* <p>Press M: Select Main Area (Blue)</p> */}
+        {/* <p>Current Selection: {selectedAreaType.toUpperCase()}</p> */}
         <button
-  onClick={() => {
-    fetch("http://localhost:5000/api/update-areas", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ areas }),
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        console.log("Areas updated:", data);
-      })
-      .catch((error) => {
-        console.error("Error updating areas:", error);
-      });
-  }}
-  style={{ marginTop: "10px", padding: "5px" }}
->
-  Save Areas
-</button>
+          onClick={() => setBordersVisible((prev) => !prev)} // Toggle borders visibility
+          style={{ marginTop: "10px", padding: "5px" }}
+        >
+          {bordersVisible ? "Hide Borders" : "Show Borders"}
+        </button>
+        <button
+          onClick={() => {
+            fetch("http://localhost:5000/api/update-areas", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ areas }),
+            })
+              .then((response) => response.json())
+              .then((data) => {
+                console.log("Areas updated:", data);
+              })
+              .catch((error) => {
+                console.error("Error updating areas:", error);
+              });
+          }}
+          style={{ marginTop: "10px", padding: "5px" }}
+        >
+          Save Areas
+        </button>
       </div>
     </div>
   );
 };
 
 export default VideoStream;
-
-
-

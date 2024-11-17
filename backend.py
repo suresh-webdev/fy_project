@@ -276,30 +276,85 @@ def video_feed():
 def update_areas():
     global working_areas, main_area
 
+    # Initialize working_areas to ensure a fixed size of 2
+    working_areas = [None, None]
+    main_area = None
+
     # Parse JSON payload
     data = request.get_json()
+
     if not data or 'areas' not in data:
         return jsonify({"error": "Invalid payload"}), 400
 
-    # Extract areas and update global variables
-    areas = data['areas']
-    working_areas = [
-        (
-            (area['x1'], area['y1']),
-            (area['x2'], area['y2'])
-        ) for area in areas if area['type'].startswith('working')
-    ]
-    main_area = next(
-        (
-            (area['x1'], area['y1']),
-            (area['x2'], area['y2'])
-        ) for area in areas if area['type'] == 'main'
-    ), None
+    try:
+        areas = data['areas']
 
-    print(f"Working areas updated: {working_areas}")
-    print(f"Main area updated: {main_area}")
+        for area in areas:
+            area_name = area['area']
+            coordinates = area['coordinates']
 
-    return jsonify({"message": "Areas updated successfully!"})
+            # Round and convert start and end coordinates
+            start = {
+                "x": round(coordinates['start']['x']),
+                "y": round(coordinates['start']['y'])
+            }
+            end = {
+                "x": round(coordinates['end']['x']),
+                "y": round(coordinates['end']['y'])
+            }
+
+            if area_name == "working1":
+                # Store in working_areas[0]
+                working_areas[0] = (start['x'], start['y']), (end['x'], end['y'])
+                print(f"Updated Working Area 1: Start {start}, End {end}")
+            elif area_name == "working2":
+                # Store in working_areas[1]
+                working_areas[1] = (start['x'], start['y']), (end['x'], end['y'])
+                print(f"Updated Working Area 2: Start {start}, End {end}")
+            elif area_name == "main":
+                # Store in main_area
+                main_area = (start['x'], start['y']), (end['x'], end['y'])
+                print(f"Updated Main Area: Start {start}, End {end}")
+
+        # Ensure all required areas are updated
+        print(f"Final Working Areas: {working_areas}")
+        print(f"Final Main Area: {main_area}")
+
+        return jsonify({"message": "Areas updated successfully!"}), 200
+
+    except KeyError as e:
+        return jsonify({"error": f"Missing key in payload: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/keypress', methods=['POST'])
+def key_input():
+    global violation_detected, current_sequence, start_time, completed_count, violated_count, yet_to_complete_count, target_count
+     # Get the data from the POST request
+    data = request.get_json()
+    
+    if not data or 'key' not in data:
+        return jsonify({"error": "Missing 'key' in request"}), 400
+
+    key = data['key']  # The key that was pressed
+    
+    # Handle different keys and update the state accordingly
+    if key == 'r':  # Reset the violation state
+        violation_detected = False
+        current_sequence = []
+        start_time = None
+        print("Sequence reset.")
+        return jsonify({"message": "Violation state reset successfully."}), 200
+    
+    elif key == 'q':  # Quit or terminate the process (can be used for cleanup)
+        print("Terminating process...")
+        completed_count = 0
+        violated_count = 0
+        yet_to_complete_count = target_count
+        return jsonify({"message": "Process terminated and counts reset."}), 200
+     
+     # Add other keys or logic as needed
+    return jsonify({"error": "Invalid key pressed."}), 400
 
 @app.route('/stream')
 def stream():
